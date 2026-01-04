@@ -28,43 +28,77 @@
     return `${trimmed.slice(0, limit).trim()}…`;
   };
 
-  const withActiveTab = (callback) => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (chrome.runtime.lastError) {
-        console.error("Failed to query tabs", chrome.runtime.lastError);
-        appendMessage("bot", "Unable to communicate with the active tab.");
-        return;
-      }
-
-      const activeTab = tabs && tabs[0];
-      if (!activeTab || typeof activeTab.id !== "number") {
-        appendMessage("bot", "No active tab available.");
-        return;
-      }
-
-      callback(activeTab.id);
-    });
-  };
-
-  const requestTabContent = (action, loadingMessage) => {
-    withActiveTab((tabId) => {
-      appendMessage("bot", loadingMessage);
-      chrome.tabs.sendMessage(tabId, { action }, (response) => {
+  const getActiveTabId = () => {
+    return new Promise((resolve, reject) => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (chrome.runtime.lastError) {
-          console.error("Message failed", chrome.runtime.lastError);
-          appendMessage("bot", "Could not retrieve content.");
+          reject(chrome.runtime.lastError);
           return;
         }
 
-        const text = response && typeof response.text === "string" ? response.text : "";
-        const preview = truncateText(text);
-        appendMessage("bot", preview || "No content returned.");
+        const activeTab = tabs && tabs[0];
+        if (!activeTab || typeof activeTab.id !== "number") {
+          reject(new Error("No active tab available."));
+          return;
+        }
+
+        resolve(activeTab.id);
       });
     });
   };
 
-  summarizeBtn.addEventListener("click", () => {
-    requestTabContent("getPageText", "Reading page content...");
+  const sendMessageToTab = (tabId, action) => {
+    return new Promise((resolve, reject) => {
+      chrome.tabs.sendMessage(tabId, { action }, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+          return;
+        }
+
+        const text = response && typeof response.text === "string" ? response.text : "";
+        resolve(text);
+      });
+    });
+  };
+
+  const requestTabContent = async (action, loadingMessage) => {
+    appendMessage("bot", loadingMessage);
+    try {
+      const tabId = await getActiveTabId();
+      const text = await sendMessageToTab(tabId, action);
+      const preview = truncateText(text);
+      appendMessage("bot", preview || "No content returned.");
+    } catch (error) {
+      console.error("Failed to retrieve tab content", error);
+      appendMessage("bot", "Could not retrieve content.");
+    }
+  };
+
+  summarizeBtn.addEventListener("click", async () => {
+    appendMessage("bot", "Reading page content...");
+    try {
+      const tabId = await getActiveTabId();
+      const pageText = await sendMessageToTab(tabId, "getPageText");
+      appendMessage("bot", "Analyzing...");
+
+      const response = await fetch("http://localhost:3000/api/summarize", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text: pageText }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server responded with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      appendMessage("bot", data && data.summary ? data.summary : "No summary returned.");
+    } catch (error) {
+      console.error("Summarize request failed", error);
+      appendMessage("bot", "Unable to summarize right now. Is the server running?");
+    }
   });
 
   explainBtn.addEventListener("click", () => {
