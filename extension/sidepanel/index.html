@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MakeItSimple</title>
+  <link rel="stylesheet" href="../styles/sidebar.css" />
+</head>
+<body>
+  <header>
+    <h1>MakeItSimple</h1>
+  </header>
+
+  <main>
+    <section id="chat-history" aria-live="polite" aria-label="Chat history"></section>
+
+    <section class="quick-actions" aria-label="Quick actions">
+      <button id="summarize-btn" type="button" data-action="summarize">Summarize Page</button>
+      <button id="explain-btn" type="button" data-action="explain">Explain Highlight</button>
+    </section>
+  </main>
+
+  <footer>
+    <label class="visually-hidden" for="chat-input">Ask about this page</label>
+    <input id="chat-input" type="text" placeholder="Ask about this page..." />
+    <button type="button" class="primary" id="send-btn">Send</button>
+  </footer>
+
+  <script src="sidebar.js"></script>
+</body>
+</html>
