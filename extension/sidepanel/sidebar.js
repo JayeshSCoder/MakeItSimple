@@ -1,4 +1,229 @@
-// Handles side panel interactions and messaging.
+// If you are using the client-side Google SDK, import it here. Otherwise we fetch via the local proxy.
+// import { getGenerativeModel } from '../scripts/google-generative-ai.js';
+
+const API_URL = 'http://localhost:3000/api';
+
+const chatHistory = document.getElementById('chat-history');
+const chatInput = document.getElementById('chat-input');
+const sendBtn = document.getElementById('send-btn');
+const summarizeBtn = document.getElementById('summarize-btn');
+const explainBtn = document.getElementById('explain-btn');
+const clearBtn = document.getElementById('clear-btn');
+
+let currentTabId = null;
+
+if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) {
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = '../scripts/pdf.worker.min.js';
+}
+
+const isPdfUrl = (url = '') => url.trim().toLowerCase().endsWith('.pdf');
+
+const extractTextFromPDF = async (url) => {
+  if (!window.pdfjsLib) {
+    throw new Error('PDF.js is not available');
+  }
+
+  const loadingTask = window.pdfjsLib.getDocument(url);
+  const pdf = await loadingTask.promise;
+  let text = '';
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {
+    const page = await pdf.getPage(pageNum);
+    const content = await page.getTextContent();
+    const pageText = content.items.map((item) => item.str || '').join(' ');
+    text += `${pageText}\n`;
+  }
+
+  return text.trim();
+};
+
+const scrollToBottom = () => {
+  chatHistory.scrollTop = chatHistory.scrollHeight;
+};
+
+const appendMessage = (sender, text, save = true) => {
+  const msgDiv = document.createElement('div');
+  msgDiv.classList.add('message');
+  msgDiv.classList.add(sender === 'User' ? 'user-message' : sender === 'System' ? 'system-message' : 'bot-message');
+
+  if (sender === 'AI' && window.marked) {
+    msgDiv.innerHTML = marked.parse(text);
+  } else if (sender === 'System') {
+    msgDiv.innerHTML = text;
+  } else {
+    msgDiv.textContent = text;
+  }
+
+  chatHistory.appendChild(msgDiv);
+  scrollToBottom();
+
+  if (save && currentTabId) {
+    saveMessage(currentTabId, { sender, text });
+  }
+};
+
+const showLoader = () => {
+  const loader = document.createElement('div');
+  loader.id = 'loader-bubble';
+  loader.classList.add('message', 'bot-message');
+  loader.textContent = 'Thinking...';
+  chatHistory.appendChild(loader);
+  scrollToBottom();
+  return loader;
+};
+
+const removeLoader = () => {
+  const loader = document.getElementById('loader-bubble');
+  if (loader) {
+    loader.remove();
+  }
+};
+
+const saveMessage = (tabId, msg) => {
+  chrome.storage.local.get([tabId.toString()], (result) => {
+    const history = result[tabId.toString()] || [];
+    history.push(msg);
+    chrome.storage.local.set({ [tabId.toString()]: history });
+  });
+};
+
+const loadChatHistory = (tabId) => {
+  chrome.storage.local.get([tabId.toString()], (result) => {
+    const history = result[tabId.toString()] || [];
+    chatHistory.innerHTML = '';
+    history.forEach((msg) => appendMessage(msg.sender, msg.text, false));
+  });
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0]) {
+      currentTabId = tabs[0].id;
+      loadChatHistory(currentTabId);
+    }
+  });
+});
+
+const getPageContext = () => {
+  return new Promise((resolve) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      const tab = tabs[0];
+      if (!tab) {
+        resolve('');
+        return;
+      }
+
+      currentTabId = tab.id;
+
+      if (isPdfUrl(tab.url)) {
+        try {
+          const pdfText = await extractTextFromPDF(tab.url);
+          resolve(pdfText);
+        } catch (error) {
+          console.error('PDF extraction failed', error);
+          resolve('');
+        }
+        return;
+      }
+
+      chrome.tabs.sendMessage(tab.id, { action: 'getPageText' }, (response) => {
+        if (chrome.runtime.lastError) {
+          resolve('');
+          return;
+        }
+        resolve(response ? response.text : '');
+      });
+    });
+  });
+};
+
+const handleChat = async () => {
+  const question = chatInput.value.trim();
+  if (!question) return;
+
+  appendMessage('User', question);
+  chatInput.value = '';
+  showLoader();
+
+  try {
+    const context = await getPageContext();
+    const res = await fetch(`${API_URL}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, context })
+    });
+    const data = await res.json();
+    removeLoader();
+    appendMessage('AI', data.answer || 'No response returned.');
+  } catch (err) {
+    removeLoader();
+    appendMessage('AI', `Error: ${err.message}`);
+  }
+};
+
+const handleSummarize = async () => {
+  appendMessage('User', 'Summarize this page');
+  showLoader();
+
+  try {
+    const context = await getPageContext();
+    const res = await fetch(`${API_URL}/summarize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: context })
+    });
+    const data = await res.json();
+    removeLoader();
+    appendMessage('AI', data.summary || 'No summary available.');
+  } catch (err) {
+    removeLoader();
+    appendMessage('AI', `Error: ${err.message}`);
+  }
+};
+
+const handleExplain = () => {
+  chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+    try {
+      const result = await chrome.scripting.executeScript({
+        target: { tabId: tabs[0].id },
+        func: () => window.getSelection().toString()
+      });
+      const selection = result[0].result;
+
+      if (!selection) {
+        alert('Please highlight some text on the page first!');
+        return;
+      }
+
+      appendMessage('User', `Explain: ${selection}`);
+      showLoader();
+      const res = await fetch(`${API_URL}/explain`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: selection })
+      });
+      const data = await res.json();
+      removeLoader();
+      appendMessage('AI', data.explanation || 'No explanation available.');
+    } catch (err) {
+      removeLoader();
+      appendMessage('AI', 'Error getting selection.');
+    }
+  });
+};
+
+sendBtn.addEventListener('click', handleChat);
+chatInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') handleChat();
+});
+summarizeBtn.addEventListener('click', handleSummarize);
+explainBtn.addEventListener('click', handleExplain);
+clearBtn.addEventListener('click', () => {
+  chatHistory.innerHTML = '';
+  if (currentTabId) {
+    chrome.storage.local.remove(currentTabId.toString());
+  }
+});// Handles side panel interactions and messaging.
 (function () {
   const STORAGE_KEY = "makeItSimpleChatHistory";
   let currentTabId = null;

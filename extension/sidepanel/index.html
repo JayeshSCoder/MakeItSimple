@@ -1,34 +1,43 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang='en'>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset='UTF-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
   <title>MakeItSimple</title>
-  <link rel="stylesheet" href="../styles/sidebar.css" />
+  <link href='../styles/sidebar.css' rel='stylesheet'>
+  <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap' rel='stylesheet'>
+  <script src='../scripts/pdf.min.js'></script>
+  <script src='../scripts/marked.min.js'></script>
 </head>
 <body>
-  <header>
-    <h1>MakeItSimple</h1>
-    <button id="clear-chat" type="button" aria-label="Clear conversation">Clear</button>
-  </header>
-
-  <main>
-    <section id="chat-history" aria-live="polite" aria-label="Chat history"></section>
-
-    <section class="quick-actions" aria-label="Quick actions">
-      <button id="summarize-btn" type="button" data-action="summarize">Summarize Page</button>
-      <button id="explain-btn" type="button" data-action="explain">Explain Highlight</button>
-    </section>
-  </main>
-
-  <footer>
-    <label class="visually-hidden" for="chat-input">Ask about this page</label>
-    <input id="chat-input" type="text" placeholder="Ask about this page..." />
-    <button type="button" class="primary" id="send-btn">Send</button>
-  </footer>
-
-  <script src="../scripts/marked.min.js"></script>
-  <script src="../scripts/pdf.min.js"></script>
-  <script src="sidebar.js"></script>
+  <div class='container'>
+    <header>
+      <div class='brand'>
+        <span class='logo-icon'>✨</span>
+        <h1>MakeItSimple</h1>
+      </div>
+      <button id='clear-btn' class='icon-btn' title='Clear Chat'>
+        <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2'></path></svg>
+      </button>
+    </header>
+    <div id='chat-history' class='chat-content'>
+      <div class='welcome-message'>
+        <p>👋 Ready to simplify the web?</p>
+      </div>
+    </div>
+    <div class='footer'>
+      <div class='suggestion-chips'>
+        <button id='summarize-btn' class='chip'>📄 Summarize</button>
+        <button id='explain-btn' class='chip'>🔍 Explain Highlight</button>
+      </div>
+      <div class='input-group'>
+        <input type='text' id='chat-input' placeholder='Ask a question...'>
+        <button id='send-btn' class='send-btn'>
+          <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><line x1='22' y1='2' x2='11' y2='13'></line><polygon points='22 2 15 22 11 13 2 9 22 2'></polygon></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  <script src='sidebar.js'></script>
 </body>
 </html>
